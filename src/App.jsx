@@ -432,8 +432,19 @@ export default function EliminedhuProject() {
   const [compareIds,    setCompareIds]    = useState([]); // plot numbers (max 3)
   const [showCompare,   setShowCompare]   = useState(false);
   const [bootDone,      setBootDone]      = useState(false);
+  // Phone-only: collapse the heavy stats cards by default to keep the drawer scannable
+  const [showInsights,  setShowInsights]  = useState(false);
 
-  const isMobile        = windowWidth < 900;
+  // isMobile: triggers the drawer-style layout (left sidebar becomes hamburger,
+  //   right panel becomes bottom sheet). Set generously so iPads in portrait
+  //   also get the drawer treatment — they don't have room for 3 columns.
+  // isPhone: stricter — for tweaks that only true small phones need.
+  // isTouch: pointer detection, independent of width (e.g. iPad Pro is wide but touch).
+  const isMobile        = windowWidth < 1000;
+  const isPhone         = windowWidth < 600;
+  const isTouch         = typeof window !== 'undefined'
+    && window.matchMedia
+    && window.matchMedia('(hover: none), (pointer: coarse)').matches;
   const activeLighting  = tourLighting || lightingMode;
   const theme           = LIGHTING[activeLighting];
 
@@ -445,6 +456,18 @@ export default function EliminedhuProject() {
     link.rel  = 'stylesheet';
     link.href = 'https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..900&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap';
     document.head.appendChild(link);
+  }, []);
+
+  // Ensure viewport meta tag exists — without it the page renders desktop-sized on phones
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let m = document.querySelector('meta[name="viewport"]');
+    if (!m) {
+      m = document.createElement('meta');
+      m.name = 'viewport';
+      m.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+      document.head.appendChild(m);
+    }
   }, []);
 
   // (2) Window resize listener
@@ -704,10 +727,22 @@ export default function EliminedhuProject() {
           85%  { transform: rotateX(10deg) scale(1.02) translate3d(0,0,0); }
           100% { transform: rotateX(12deg) scale(1)    translate3d(0,0,0); }
         }
-        .water-shimmer   { animation: waterShimmer 4s ease-in-out infinite; }
-        .fadeup          { animation: fadeUp 0.4s ease-out backwards; }
-        .plot-breathe    { animation: breathe 4s ease-in-out infinite; }
-        .tour-wrapper    { animation: droneTour 25s cubic-bezier(0.4,0,0.2,1) forwards; }
+        /* Mobile-safe tour — smaller offsets so the map doesn't fly off a small screen */
+        @keyframes droneTourMobile {
+          0%   { transform: rotateX(8deg)  scale(1)    translate3d(0,0,0); }
+          8%   { transform: rotateX(14deg) scale(1.06) translate3d(0,-12px,0); }
+          22%  { transform: rotateX(20deg) scale(1.20) translate3d(-24px,-40px,0); }
+          38%  { transform: rotateX(22deg) scale(1.25) translate3d(20px,40px,0); }
+          54%  { transform: rotateX(18deg) scale(1.15) translate3d(34px,12px,0); }
+          70%  { transform: rotateX(12deg) scale(1.08) translate3d(12px,-18px,0); }
+          85%  { transform: rotateX(8deg)  scale(1.02) translate3d(0,0,0); }
+          100% { transform: rotateX(8deg)  scale(1)    translate3d(0,0,0); }
+        }
+        .water-shimmer        { animation: waterShimmer 4s ease-in-out infinite; }
+        .fadeup               { animation: fadeUp 0.4s ease-out backwards; }
+        .plot-breathe         { animation: breathe 4s ease-in-out infinite; }
+        .tour-wrapper         { animation: droneTour 25s cubic-bezier(0.4,0,0.2,1) forwards; }
+        .tour-wrapper-mobile  { animation: droneTourMobile 25s cubic-bezier(0.4,0,0.2,1) forwards; }
         .entrance-pulse  { transform-box: fill-box; transform-origin: center; animation: entrancePulse 2.4s ease-out infinite; }
         .road-flow       { animation: roadFlow 1.6s linear infinite; }
         .plot-boot       { animation: plotBootIn 0.6s cubic-bezier(0.34,1.56,0.64,1) backwards; transform-box: fill-box; transform-origin: center; }
@@ -795,7 +830,8 @@ export default function EliminedhuProject() {
           </div>
           <button onClick={() => setMobileMenu(!mobileMenu)} style={{
             background: 'none', border: `1px solid ${theme.border}`, color: theme.text,
-            padding: '6px 12px', fontSize: 11, letterSpacing: '.2em', cursor: 'pointer'
+            padding: '10px 16px', fontSize: 11, letterSpacing: '.2em', cursor: 'pointer',
+            minHeight: 40, minWidth: 80, fontFamily: 'inherit'
           }}>{mobileMenu ? 'CLOSE' : 'MENU'}</button>
         </div>
       )}
@@ -914,9 +950,12 @@ export default function EliminedhuProject() {
                 <button
                   onClick={() => setSearchQ('')}
                   style={{
-                    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', color: theme.muted, fontSize: 14,
-                    cursor: 'pointer', padding: '4px 6px', lineHeight: 1
+                    position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', color: theme.muted,
+                    fontSize: isTouch ? 18 : 14,
+                    cursor: 'pointer', padding: 0, lineHeight: 1,
+                    width: isTouch ? 36 : 28, height: isTouch ? 36 : 28,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}
                   aria-label="Clear search"
                 >×</button>
@@ -928,7 +967,7 @@ export default function EliminedhuProject() {
                 marginTop: 6,
                 background: 'rgba(8,6,4,0.92)',
                 border: `1px solid ${theme.accent}40`,
-                maxHeight: 200, overflowY: 'auto'
+                maxHeight: isTouch ? 280 : 200, overflowY: 'auto'
               }}>
                 {searchResults.map(p => {
                   const meta = PARTY[p.pa];
@@ -943,7 +982,9 @@ export default function EliminedhuProject() {
                       onMouseEnter={() => onPlotEnter(p.n)}
                       onMouseLeave={onPlotLeave}
                       style={{
-                        width: '100%', padding: '9px 12px',
+                        width: '100%',
+                        padding: isTouch ? '14px 14px' : '9px 12px',
+                        minHeight: isTouch ? 48 : 'auto',
                         background: 'transparent', border: 'none',
                         borderBottom: `1px solid ${theme.border}`,
                         color: theme.text, cursor: 'pointer',
@@ -957,7 +998,7 @@ export default function EliminedhuProject() {
                       <span style={{
                         width: 4, height: 18, background: meta.color, flexShrink: 0
                       }} />
-                      <span className="mono" style={{ fontSize: 12, color: theme.text, minWidth: 36 }}>
+                      <span className="mono" style={{ fontSize: isTouch ? 14 : 12, color: theme.text, minWidth: 40 }}>
                         {String(p.n).padStart(3, '0')}
                       </span>
                       <span style={{ flex: 1, fontSize: 10.5, color: theme.muted, letterSpacing: '.05em' }}>
@@ -1237,6 +1278,29 @@ export default function EliminedhuProject() {
                 </label>
               </div>
 
+              {/* Phone-only toggle to expand/collapse the stats block (saves drawer height) */}
+              {isPhone && (
+                <button
+                  onClick={() => setShowInsights(v => !v)}
+                  style={{
+                    width: '100%', padding: '12px 14px',
+                    background: 'transparent', border: `1px solid ${theme.border}`,
+                    color: theme.muted, fontSize: 10.5, letterSpacing: '.3em',
+                    fontFamily: 'inherit', cursor: 'pointer',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    minHeight: 44
+                  }}
+                >
+                  <span>INSIGHTS</span>
+                  <span style={{ fontSize: 14, color: theme.faint }}>
+                    {showInsights ? '−' : '+'}
+                  </span>
+                </button>
+              )}
+
+              {/* Stats group — always visible on tablet/desktop, toggleable on phone */}
+              {(!isPhone || showInsights) && (<>
+
               {/* INVENTORY MIX — size histogram */}
               <div className="fadeup" style={{ animationDelay: '.35s' }}>
                 <div style={{
@@ -1312,7 +1376,10 @@ export default function EliminedhuProject() {
                 </div>
               </div>
 
-              {/* KEYBOARD SHORTCUTS */}
+              </>)}
+
+              {/* KEYBOARD SHORTCUTS — only shown when there's a real keyboard */}
+              {!isTouch && (
               <div className="fadeup" style={{ animationDelay: '.45s' }}>
                 <div style={{
                   fontSize: 9.5, letterSpacing: '.3em', color: theme.faint, marginBottom: 12,
@@ -1348,6 +1415,7 @@ export default function EliminedhuProject() {
                   ))}
                 </div>
               </div>
+              )}
             </>
           )}
 
@@ -1370,17 +1438,18 @@ export default function EliminedhuProject() {
         <main style={{
           flex: 1, position: 'relative', display: 'flex',
           alignItems: 'center', justifyContent: 'center',
-          // Right padding reserves space for the FIXED right detail panel (340px)
-          // so the canvas reflows around it instead of being hidden behind it.
+          // Padding reserves space for the FIXED detail panel:
+          //  - Desktop: panel is on the right (340px) → paddingRight when open
+          //  - Mobile : panel is at the bottom (~60vh) → paddingBottom when open
           paddingTop:    isMobile ? 16 : 40,
-          paddingBottom: isMobile ? 16 : 40,
-          paddingLeft:   isMobile ? 16 : 40,
-          paddingRight:  isMobile ? 16 : (currentPlot ? 380 : 40),
+          paddingBottom: isMobile ? (currentPlot ? '62vh' : 16) : 40,
+          paddingLeft:   isMobile ? 12 : 40,
+          paddingRight:  isMobile ? 12 : (currentPlot ? 380 : 40),
           perspective: '2000px',
           minHeight: isMobile ? 'calc(100vh - 56px)' : '100vh',
           minWidth: 0,
           overflow: 'hidden',
-          transition: 'padding-right .3s ease'   // smooth canvas reflow when panel opens/closes
+          transition: 'padding .3s ease'   // smooth canvas reflow when panel opens/closes
         }}>
           {!isMobile && (
             <>
@@ -1467,15 +1536,18 @@ export default function EliminedhuProject() {
 
           {/* (7) Tour wrapper — CSS animation or manual tilt */}
           <div
-            className={tourPlaying ? 'tour-wrapper' : ''}
+            className={tourPlaying ? (isMobile ? 'tour-wrapper-mobile' : 'tour-wrapper') : ''}
             style={{
               transform: tourPlaying ? undefined : `rotateX(${tilt}deg)`,
               transformStyle: 'preserve-3d',
               transition: tourPlaying ? 'none' : 'transform .4s ease',
               transformOrigin: 'center center',
-              height: isMobile ? '70vh' : '88vh',
+              height: isMobile
+                ? (currentPlot ? '32vh' : '70vh')   // ← shrink when bottom sheet is open
+                : '88vh',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              maxWidth: '100%'
+              maxWidth: '100%',
+              transition: 'height .3s ease'
             }}>
             <svg viewBox={`0 0 ${VB_W} ${H}`} preserveAspectRatio="xMidYMid meet"
               style={{ height: '100%', width: 'auto', maxWidth: '100%',
@@ -1587,17 +1659,30 @@ export default function EliminedhuProject() {
             </svg>
           </div>
 
-          {/* (4) Mouse-following tooltip */}
-          {hovered && !selectedPlot && (() => {
+          {/* (4) Mouse-following tooltip — suppressed on touch (causes flash on tap) */}
+          {hovered && !selectedPlot && !isTouch && (() => {
             const p = D.plots.find(x => x && x.n === hovered);
             if (!p || !PARTY[p.pa]) return null;
             const meta = PARTY[p.pa];
-            const W_TT = 240, H_TT = 140, margin = 16;
-            let tx = mousePos.x + 18, ty = mousePos.y + 18;
-            if (typeof window !== 'undefined') {
-              if (tx + W_TT + margin > window.innerWidth)  tx = mousePos.x - W_TT - 18;
-              if (ty + H_TT + margin > window.innerHeight) ty = mousePos.y - H_TT - 18;
-            }
+            // Tooltip ACTUAL width varies (party label like "LANDOWNER PRE COMMITMENT"
+            // can push it past 240px). Use a generous estimate and CLAMP to viewport,
+            // accounting for the right detail panel when open (340px + small gap).
+            const TT_W = 260, TT_H = 150, gap = 14;
+            const vw = (typeof window !== 'undefined') ? window.innerWidth  : 1200;
+            const vh = (typeof window !== 'undefined') ? window.innerHeight : 800;
+            // Right boundary: stay inside viewport, and outside the right panel if open
+            const rightLimit = vw - gap - (currentPlot && !isMobile ? 340 : 0);
+            // Preferred position: to the bottom-right of the cursor
+            let tx = mousePos.x + 18;
+            let ty = mousePos.y + 18;
+            // If it would overflow right, flip to the LEFT of the cursor
+            if (tx + TT_W > rightLimit) tx = mousePos.x - TT_W - 18;
+            // Final clamp — never let it go off-screen on either side
+            if (tx < gap)               tx = gap;
+            if (tx + TT_W > rightLimit) tx = rightLimit - TT_W;
+            // Same for vertical
+            if (ty + TT_H > vh - gap)   ty = mousePos.y - TT_H - 18;
+            if (ty < gap)               ty = gap;
             return (
               <div style={{
                 position: 'fixed', top: ty, left: tx,
@@ -1606,7 +1691,10 @@ export default function EliminedhuProject() {
                 borderLeft: `3px solid ${meta.color}`,
                 padding: '16px 20px', backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                fontSize: 13, minWidth: W_TT, pointerEvents: 'none', zIndex: 50,
+                fontSize: 13,
+                width: TT_W,           // ← fixed width (not minWidth) so the clamp math is accurate
+                maxWidth: TT_W,
+                pointerEvents: 'none', zIndex: 50,
                 boxShadow: `0 12px 36px rgba(0,0,0,.7), 0 0 24px ${meta.color}22`
               }}>
                 <div style={{
@@ -1752,10 +1840,10 @@ export default function EliminedhuProject() {
                       position: 'relative'
                     }}>
                       <button onClick={() => removeFromCompare(n)} style={{
-                        position: 'absolute', top: 6, right: 6,
+                        position: 'absolute', top: 4, right: 4,
                         background: 'rgba(0,0,0,0.4)', border: 'none',
-                        color: theme.muted, fontSize: 14, cursor: 'pointer',
-                        width: 22, height: 22, lineHeight: 1,
+                        color: theme.muted, fontSize: isTouch ? 18 : 14, cursor: 'pointer',
+                        width: isTouch ? 36 : 22, height: isTouch ? 36 : 22, lineHeight: 1,
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }} aria-label="Remove">×</button>
                       <div style={{
@@ -1821,22 +1909,22 @@ export default function EliminedhuProject() {
             width: isMobile ? '100%' : 340,
             minWidth: isMobile ? 'unset' : 340,
             flexShrink: 0,
-            padding: isMobile ? '24px 20px' : '36px 30px',
+            padding: isPhone ? '18px 16px calc(18px + env(safe-area-inset-bottom))'
+                   : isMobile ? '22px 20px calc(22px + env(safe-area-inset-bottom))'
+                   : '36px 30px',
             borderLeft: isMobile ? 'none' : `1px solid ${PARTY[currentPlot.pa].color}40`,
             borderTop: isMobile ? `2px solid ${PARTY[currentPlot.pa].color}` : 'none',
             background: theme.panel, backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
-            display: 'flex', flexDirection: 'column', gap: 22,
+            display: 'flex', flexDirection: 'column', gap: isPhone ? 14 : 22,
             // Pin to viewport edge — on desktop fixed-right, on mobile fixed-bottom.
-            // This is the fix for the panel getting clipped when clicking plots on
-            // the right side of the canvas: it now docks to the screen, not the flow.
             position: 'fixed',
             top:    isMobile ? 'auto' : 0,
             bottom: isMobile ? 0      : 0,
             left:   isMobile ? 0      : 'auto',
             right:  0,
             height: isMobile ? 'auto' : '100vh',
-            maxHeight: isMobile ? '50vh' : '100vh',
+            maxHeight: isPhone ? '65vh' : isMobile ? '60vh' : '100vh',
             overflowY: 'auto',
             animation: 'fadeUp .3s ease-out',
             zIndex: 30,
@@ -1858,7 +1946,7 @@ export default function EliminedhuProject() {
                   PLOT NO
                 </div>
                 <div className="display-font" style={{
-                  fontSize: 76, fontWeight: 300, lineHeight: 1,
+                  fontSize: isPhone ? 56 : 76, fontWeight: 300, lineHeight: 1,
                   color: theme.text, letterSpacing: '-.045em',
                   background: `linear-gradient(180deg, ${theme.text}, ${theme.muted})`,
                   WebkitBackgroundClip: 'text',
@@ -1869,12 +1957,14 @@ export default function EliminedhuProject() {
                 </div>
               </div>
               <button onClick={() => setSelectedPlot(null)}
+                aria-label="Close plot details"
                 style={{
                   background: 'none', border: `1px solid ${theme.border}`,
-                  color: theme.muted, fontSize: 20, cursor: 'pointer',
-                  width: 32, height: 32, padding: 0, lineHeight: 1,
+                  color: theme.muted, fontSize: isTouch ? 24 : 20, cursor: 'pointer',
+                  width: isTouch ? 44 : 32, height: isTouch ? 44 : 32,
+                  padding: 0, lineHeight: 1,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all .2s'
+                  transition: 'all .2s', flexShrink: 0
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = theme.text; e.currentTarget.style.borderColor = theme.accent; }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = theme.muted; e.currentTarget.style.borderColor = theme.border; }}
@@ -1928,6 +2018,63 @@ export default function EliminedhuProject() {
                 </div>
               </div>
             </div>
+
+            {/* Compare actions — primary way to build a comparison on touch devices */}
+            {(() => {
+              const inCompare = compareIds.includes(currentPlot.n);
+              const canAdd    = !inCompare && compareIds.length < 3;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      if (inCompare) {
+                        removeFromCompare(currentPlot.n);
+                      } else if (canAdd) {
+                        setCompareIds(prev => [...prev, currentPlot.n]);
+                      }
+                    }}
+                    disabled={!inCompare && !canAdd}
+                    style={{
+                      width: '100%', padding: '14px 16px',
+                      background: inCompare
+                        ? 'rgba(0,0,0,0.35)'
+                        : (canAdd
+                            ? `linear-gradient(135deg, ${theme.accent}28, ${theme.accent}0c)`
+                            : 'rgba(0,0,0,0.25)'),
+                      border: `1px solid ${inCompare ? theme.border : (canAdd ? theme.accent : theme.border)}`,
+                      color: inCompare ? theme.muted : (canAdd ? theme.accent : theme.faint),
+                      fontSize: 11, letterSpacing: '.25em', fontWeight: 600,
+                      fontFamily: 'inherit',
+                      cursor: (inCompare || canAdd) ? 'pointer' : 'not-allowed',
+                      transition: 'all .2s ease',
+                      minHeight: 44   // ← proper touch target
+                    }}
+                  >
+                    {inCompare
+                      ? '− REMOVE FROM COMPARE'
+                      : (canAdd
+                          ? `+ ADD TO COMPARE  ·  ${compareIds.length}/3`
+                          : 'COMPARE FULL (3/3)')}
+                  </button>
+                  {compareIds.length > 0 && (
+                    <button
+                      onClick={() => setShowCompare(true)}
+                      style={{
+                        width: '100%', padding: '10px 16px',
+                        background: 'transparent',
+                        border: `1px solid ${theme.border}`,
+                        color: theme.muted,
+                        fontSize: 10, letterSpacing: '.25em',
+                        fontFamily: 'inherit', cursor: 'pointer',
+                        minHeight: 38
+                      }}
+                    >
+                      VIEW COMPARISON ({compareIds.length})
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Footer */}
             <div style={{
