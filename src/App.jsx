@@ -235,39 +235,68 @@ const GeoHalos = React.memo(function GeoHalos({ theme, W, H }) {
 });
 
 // ── MAIN ENTRANCE MARKER ─────────────────────────────────────────────────────
-// Sits on the perimeter road between Plot 18 (NE) and Plot 42 (SW). The road
-// segment between them runs roughly along world-y ≈ 64 between x ≈ 104 and 123,
-// so we pin the marker just outside that road and point an arrow inward.
+// Sits on the perimeter road between Plot 18 (NE) and Plot 42 (SW). Beefier
+// architectural callout: thick dashed gold span across the entrance gap with
+// double-headed indicators + large badge carrying "MAIN ENTRANCE" + ENTRY · EXIT.
 const EntranceMarker = React.memo(function EntranceMarker({ theme }) {
   // Anchor in world coords — verified against D.plots[17] (Plot 18) and D.plots[41] (Plot 42).
   const worldX = 113.5;
   const worldY = 64.2;
   const [px, py] = proj(worldX, worldY);
-  // Label sits above (north of) the marker.
+  // Width of the entrance span (in canvas units, post-scale)
+  const SPAN = 38;
+  const halfSpan = SPAN / 2;
+  // Label badge sits well above (north of) the marker.
   const labelX = px;
-  const labelY = py - 38;
+  const labelY = py - 50;
+  const badgeW = 116, badgeH = 34;
   return (
     <g style={{ pointerEvents: 'none' }}>
-      {/* Outer breathing ring */}
+      {/* Double-headed entrance span — left arrow head */}
+      <polygon
+        points={`${px - halfSpan - 4},${py} ${px - halfSpan + 3},${py - 3} ${px - halfSpan + 3},${py + 3}`}
+        fill={theme.accent} opacity="0.95"
+      />
+      {/* Right arrow head */}
+      <polygon
+        points={`${px + halfSpan + 4},${py} ${px + halfSpan - 3},${py - 3} ${px + halfSpan - 3},${py + 3}`}
+        fill={theme.accent} opacity="0.95"
+      />
+      {/* Thick dashed gold span connecting the two arrowheads */}
+      <line x1={px - halfSpan + 3} y1={py} x2={px + halfSpan - 3} y2={py}
+        stroke={theme.accent} strokeWidth="1.2" strokeDasharray="3,2.5"
+        opacity="0.9" strokeLinecap="round" />
+      {/* Outer breathing ring for the centre node */}
       <circle cx={px} cy={py} r={9} fill="none" stroke={theme.accent}
         strokeWidth="0.6" opacity="0.55" className="entrance-pulse" />
-      {/* Mid ring */}
-      <circle cx={px} cy={py} r={5} fill="none" stroke={theme.accent}
-        strokeWidth="0.8" opacity="0.85" />
-      {/* Solid core */}
-      <circle cx={px} cy={py} r={2.4} fill={theme.accent} />
-      {/* Pointer arrow from label down to marker */}
-      <line x1={labelX} y1={labelY + 5} x2={px} y2={py - 11}
+      {/* Centre node */}
+      <circle cx={px} cy={py} r={3} fill={theme.accent}
+        stroke="#0a0908" strokeWidth="0.4" />
+      {/* Pointer arrow from badge down to centre node */}
+      <line x1={labelX} y1={labelY + badgeH/2 + 1} x2={px} y2={py - 11}
         stroke={theme.accent} strokeWidth="0.7" strokeDasharray="2,2" opacity="0.7" />
-      <polygon points={`${px - 2.4},${py - 12} ${px + 2.4},${py - 12} ${px},${py - 8.5}`}
-        fill={theme.accent} opacity="0.9" />
-      {/* Label badge */}
-      <rect x={labelX - 42} y={labelY - 9} width={84} height={18}
-        fill="rgba(8,6,4,0.78)" stroke={theme.accent} strokeWidth="0.4" rx="1" />
-      <text x={labelX} y={labelY + 3.4} textAnchor="middle"
-        fontSize="6.2" letterSpacing="2.4" fontWeight="600" fill={theme.accent}
+      <polygon points={`${px - 2.4},${py - 12} ${px + 2.4},${py - 12} ${px},${py - 8}`}
+        fill={theme.accent} opacity="0.95" />
+      {/* Badge backdrop */}
+      <rect x={labelX - badgeW/2} y={labelY - badgeH/2}
+        width={badgeW} height={badgeH}
+        fill="rgba(8,6,4,0.85)" stroke={theme.accent} strokeWidth="0.5" rx="1.5" />
+      {/* Top accent line inside badge */}
+      <line x1={labelX - badgeW/2 + 8} y1={labelY - badgeH/2 + 5}
+        x2={labelX + badgeW/2 - 8} y2={labelY - badgeH/2 + 5}
+        stroke={theme.accent} strokeWidth="0.3" opacity="0.5" />
+      {/* Main label */}
+      <text x={labelX} y={labelY - 1} textAnchor="middle"
+        fontSize="7.2" letterSpacing="3" fontWeight="700" fill={theme.accent}
         style={{ fontFamily: "'JetBrains Mono', monospace" }}>
         MAIN ENTRANCE
+      </text>
+      {/* Sub-line */}
+      <text x={labelX} y={labelY + 9} textAnchor="middle"
+        fontSize="4.2" letterSpacing="3.5" fontWeight="500"
+        fill={theme.muted}
+        style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+        ENTRY  ·  EXIT
       </text>
     </g>
   );
@@ -326,42 +355,52 @@ const RoadAnnotation = React.memo(function RoadAnnotation({ theme }) {
 
 // ── DRONE TOUR ROUTE ─────────────────────────────────────────────────────────
 // Six guided waypoints — pinned to world coords so they survive bound changes.
+// Each step now carries a narration caption + lighting mode (Day/Night transition).
 const TOUR_STEPS = [
-  { id: 0, label: 'Site Overview',         world: [125, 235] },
-  { id: 1, label: '100 FT Road Access',    world: [150, 50]  },
-  { id: 2, label: 'Main Entrance',         world: [113.5, 64.2] },
-  { id: 3, label: 'Internal Roads',        world: [110, 175] },
-  { id: 4, label: 'Cycle Track & Green',   world: [200, 360] },
-  { id: 5, label: 'Final Overview',        world: [125, 235] }
+  {
+    id: 0, label: 'Site Overview', world: [125, 235], lighting: 'dark',
+    caption: '169 plots across 45,657 sq.yds — a fully planned community minutes from ORR.'
+  },
+  {
+    id: 1, label: '100 FT Road Access', world: [150, 50], lighting: 'golden',
+    caption: 'Direct frontage onto a 100 ft principal road — the spine of the entire layout.'
+  },
+  {
+    id: 2, label: 'Main Entrance', world: [113.5, 64.2], lighting: 'golden',
+    caption: 'Single grand entrance between Plot 18 and Plot 42 — controlled entry, secure exit.'
+  },
+  {
+    id: 3, label: 'Internal Roads', world: [110, 175], lighting: 'dark',
+    caption: 'Wide internal carriageways connecting every cluster — no plot more than 60 ft from a road.'
+  },
+  {
+    id: 4, label: 'Cycle Track & Green Edge', world: [200, 360], lighting: 'blue',
+    caption: 'A dedicated cycle track and green belt wraps the southern edge for residents.'
+  },
+  {
+    id: 5, label: 'Final Overview', world: [125, 235], lighting: 'dark',
+    caption: 'Eliminedu Project — Minutes from ORR. Built for Growth.'
+  }
 ];
 
 const TourRoute = React.memo(function TourRoute({ theme, visible, activeStep }) {
   if (!visible) return null;
   const pts = TOUR_STEPS.map(s => proj(s.world[0], s.world[1]));
-  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]},${p[1]}`).join(' ');
+  // Lines between waypoints were removed by request — only the waypoint
+  // markers themselves remain to indicate the camera's current focus.
   return (
     <g style={{ pointerEvents: 'none' }}>
-      {/* Glow underlay */}
-      <path d={d} fill="none" stroke={theme.accent} strokeOpacity="0.22"
-        strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-      {/* Dotted route */}
-      <path d={d} fill="none" stroke={theme.accent} strokeOpacity="0.9"
-        strokeWidth="0.7" strokeDasharray="1.5,3" strokeLinecap="round" />
-      {/* Waypoint markers */}
       {pts.map(([x, y], i) => {
         const isActive = i === activeStep;
+        if (!isActive) return null; // only render the *current* waypoint, not all six
         return (
           <g key={`tw-${i}`}>
-            <circle cx={x} cy={y} r={isActive ? 4.5 : 3} fill={theme.accent}
-              opacity={isActive ? 1 : 0.7}
-              className={isActive ? 'entrance-pulse' : ''} />
-            <circle cx={x} cy={y} r={1.4} fill="#0a0908" />
-            <text x={x} y={y - 7} textAnchor="middle"
-              fontSize="5" fontWeight="600" fill={theme.accent}
-              style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              opacity={isActive ? 1 : 0.55}>
-              {String(i + 1).padStart(2, '0')}
-            </text>
+            {/* Pulsing outer halo on the active waypoint */}
+            <circle cx={x} cy={y} r={10} fill="none" stroke={theme.accent}
+              strokeWidth="0.6" opacity="0.5" className="entrance-pulse" />
+            <circle cx={x} cy={y} r={5} fill={theme.accent} opacity="0.95"
+              className="entrance-pulse" />
+            <circle cx={x} cy={y} r={1.6} fill="#0a0908" />
           </g>
         );
       })}
@@ -378,17 +417,25 @@ export default function EliminedhuProject() {
   const [mousePos,      setMousePos]      = useState({ x: 0, y: 0 });
   const [tilt,          setTilt]          = useState(12);
   const [showLabels,    setShowLabels]    = useState(false);
-  // (6) Lighting mode
+  // (6) Lighting mode (manual)
   const [lightingMode,  setLightingMode]  = useState('dark');
+  // Tour-driven lighting override (Day/Night transition during the guided tour)
+  const [tourLighting,  setTourLighting]  = useState(null);
   // (7) Drone tour
   const [tourPlaying,   setTourPlaying]   = useState(false);
   const [tourStep,      setTourStep]      = useState(0);
   // (2) Responsive
   const [windowWidth,   setWindowWidth]   = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
   const [mobileMenu,    setMobileMenu]    = useState(false);
+  // NEW: search, compare, loading shimmer
+  const [searchQ,       setSearchQ]       = useState('');
+  const [compareIds,    setCompareIds]    = useState([]); // plot numbers (max 3)
+  const [showCompare,   setShowCompare]   = useState(false);
+  const [bootDone,      setBootDone]      = useState(false);
 
-  const isMobile = windowWidth < 900;
-  const theme    = LIGHTING[lightingMode];
+  const isMobile        = windowWidth < 900;
+  const activeLighting  = tourLighting || lightingMode;
+  const theme           = LIGHTING[activeLighting];
 
   // (5) Font injection with ID guard
   useEffect(() => {
@@ -415,25 +462,91 @@ export default function EliminedhuProject() {
     return () => document.removeEventListener('mousemove', fn);
   }, [hovered]);
 
-  // (7) Drone tour stepping — advance through TOUR_STEPS, reset and stop at end.
+  // (7) Drone tour stepping — advance through TOUR_STEPS, also smoothly drive
+  // the Day/Night transition by toggling tourLighting at each step.
   useEffect(() => {
     if (!tourPlaying) {
       setTourStep(0);
+      setTourLighting(null); // restore manual lighting
       return;
     }
     const STEP_MS = Math.floor(25000 / TOUR_STEPS.length);
     let idx = 0;
     setTourStep(0);
+    setTourLighting(TOUR_STEPS[0].lighting);
     const tick = setInterval(() => {
       idx += 1;
       if (idx >= TOUR_STEPS.length) {
         setTourPlaying(false);
       } else {
         setTourStep(idx);
+        setTourLighting(TOUR_STEPS[idx].lighting);
       }
     }, STEP_MS);
     return () => clearInterval(tick);
   }, [tourPlaying]);
+
+  // Loading shimmer — plots stagger in on first mount, then animation stops.
+  useEffect(() => {
+    const t = setTimeout(() => setBootDone(true), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Deep-link sync: read ?plot=N on mount, write on selection change.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('plot');
+    if (p && /^\d+$/.test(p)) {
+      const n = parseInt(p, 10);
+      if (D.plots.some(pl => pl && pl.n === n)) setSelectedPlot(n);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (selectedPlot != null) url.searchParams.set('plot', String(selectedPlot));
+    else url.searchParams.delete('plot');
+    window.history.replaceState({}, '', url);
+  }, [selectedPlot]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const fn = (e) => {
+      // Skip if user is typing inside the search box (or any input/textarea)
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      switch (e.key) {
+        case '1': setSelectedParty(p => p === 'LO' ? null : 'LO'); break;
+        case '2': setSelectedParty(p => p === 'DEV' ? null : 'DEV'); break;
+        case '3': setSelectedParty(p => p === 'LPC' ? null : 'LPC'); break;
+        case 'l': case 'L': setShowLabels(v => !v); break;
+        case 't': case 'T': setTourPlaying(v => !v); break;
+        case 'c': case 'C':
+          if (compareIds.length > 0) setShowCompare(v => !v);
+          break;
+        case 'Escape':
+          setSelectedPlot(null); setShowCompare(false); break;
+        case 'ArrowRight':
+          if (selectedPlot != null) {
+            const next = D.plots.find(p => p && p.n === selectedPlot + 1);
+            if (next) setSelectedPlot(next.n);
+          }
+          break;
+        case 'ArrowLeft':
+          if (selectedPlot != null && selectedPlot > 1) {
+            const prev = D.plots.find(p => p && p.n === selectedPlot - 1);
+            if (prev) setSelectedPlot(prev.n);
+          }
+          break;
+        default: break;
+      }
+    };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, [selectedPlot, compareIds.length]);
 
   // (3) Resilient partyStats
   const partyStats = useMemo(() => {
@@ -486,6 +599,63 @@ export default function EliminedhuProject() {
 
   const currentPlot = selectedPlot !== null ? D.plots.find(p => p && p.n === selectedPlot) : null;
 
+  // Facing distribution across the entire site
+  const facingDist = useMemo(() => {
+    const counts = {};
+    D.plots.forEach(p => {
+      if (!p || !p.f) return;
+      counts[p.f] = (counts[p.f] || 0) + 1;
+    });
+    // Sort by count desc for nicer display
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, []);
+
+  // Size histogram — bucket plots by size band
+  const sizeBuckets = useMemo(() => {
+    const bands = [
+      { label: '< 250',   min: 0,    max: 249,  count: 0 },
+      { label: '250–300', min: 250,  max: 300,  count: 0 },
+      { label: '300–400', min: 301,  max: 400,  count: 0 },
+      { label: '400+',    min: 401,  max: 1e9,  count: 0 }
+    ];
+    D.plots.forEach(p => {
+      if (!p || typeof p.s !== 'number') return;
+      const b = bands.find(b => p.s >= b.min && p.s <= b.max);
+      if (b) b.count++;
+    });
+    return bands;
+  }, []);
+
+  // Search filtering — matches plot numbers (partial or full)
+  const searchResults = useMemo(() => {
+    const q = (searchQ || '').trim();
+    if (!q || !/^\d+$/.test(q)) return [];
+    return D.plots
+      .filter(p => p && String(p.n).startsWith(q))
+      .sort((a, b) => a.n - b.n)
+      .slice(0, 8);
+  }, [searchQ]);
+
+  // Compare-mode plot click: shift adds/removes, normal opens detail panel.
+  const handlePlotClick = useCallback((n, evt) => {
+    if (evt && evt.shiftKey) {
+      setCompareIds(prev => {
+        if (prev.includes(n)) return prev.filter(x => x !== n);
+        if (prev.length >= 3) return [prev[1], prev[2], n]; // FIFO, cap at 3
+        return [...prev, n];
+      });
+    } else {
+      setSelectedPlot(n);
+    }
+  }, []);
+  const removeFromCompare = useCallback((n) => {
+    setCompareIds(prev => prev.filter(x => x !== n));
+  }, []);
+  const clearCompare = useCallback(() => {
+    setCompareIds([]);
+    setShowCompare(false);
+  }, []);
+
   const onPlotEnter = useCallback((n) => setHovered(n), []);
   const onPlotLeave = useCallback(() => setHovered(null), []);
 
@@ -518,6 +688,11 @@ export default function EliminedhuProject() {
           from { stroke-dashoffset: 0;   }
           to   { stroke-dashoffset: -14; }
         }
+        /* Loading shimmer — plots stagger in on first mount */
+        @keyframes plotBootIn {
+          from { opacity: 0; transform: translateY(4px) scale(0.92); }
+          to   { opacity: 1; transform: translateY(0)   scale(1); }
+        }
         /* (7) Drone tour CSS animation */
         @keyframes droneTour {
           0%   { transform: rotateX(12deg) scale(1)    translate3d(0,0,0); }
@@ -535,6 +710,7 @@ export default function EliminedhuProject() {
         .tour-wrapper    { animation: droneTour 25s cubic-bezier(0.4,0,0.2,1) forwards; }
         .entrance-pulse  { transform-box: fill-box; transform-origin: center; animation: entrancePulse 2.4s ease-out infinite; }
         .road-flow       { animation: roadFlow 1.6s linear infinite; }
+        .plot-boot       { animation: plotBootIn 0.6s cubic-bezier(0.34,1.56,0.64,1) backwards; transform-box: fill-box; transform-origin: center; }
         .plot-poly {
           transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), filter 0.35s ease, opacity 0.3s ease;
           cursor: pointer;
@@ -563,6 +739,31 @@ export default function EliminedhuProject() {
           background: linear-gradient(180deg, rgba(255,255,255,0.04), transparent 35%);
           pointer-events: none;
         }
+        .search-input {
+          width: 100%;
+          padding: 11px 14px 11px 36px;
+          background: rgba(0,0,0,0.35);
+          border: 1px solid ${theme.border};
+          color: ${theme.text};
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 12px;
+          letter-spacing: .08em;
+          outline: none;
+          transition: border-color .2s ease, box-shadow .2s ease;
+        }
+        .search-input:focus {
+          border-color: ${theme.accent};
+          box-shadow: 0 0 0 3px ${theme.accent}1f;
+        }
+        .search-input::placeholder { color: ${theme.faint}; letter-spacing: .12em; }
+        .compare-chip {
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 6px 8px 6px 10px;
+          background: rgba(0,0,0,0.55);
+          border: 1px solid ${theme.border};
+          transition: all .2s ease;
+        }
+        .compare-chip:hover { border-color: ${theme.accent}; }
         ::-webkit-scrollbar       { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(255,255,255,.02); }
         ::-webkit-scrollbar-thumb { background: ${theme.accent}30; border-radius: 3px; }
@@ -613,6 +814,7 @@ export default function EliminedhuProject() {
           width: isMobile ? '85%' : 360,
           maxWidth: isMobile ? 360 : 'unset',
           minWidth: isMobile ? 'unset' : 360,
+          flexShrink: 0,        // ← stay full-width when right panel opens
           padding: '32px 28px',
           borderRight: isMobile ? 'none' : `1px solid ${theme.border}`,
           background: theme.panel,
@@ -679,6 +881,105 @@ export default function EliminedhuProject() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* SEARCH */}
+          <div className="fadeup" style={{ animationDelay: '.07s', position: 'relative' }}>
+            <div style={{ position: 'relative' }}>
+              {/* Magnifier icon */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                style={{
+                  position: 'absolute', left: 12, top: '50%',
+                  transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.65
+                }}>
+                <circle cx="11" cy="11" r="7" stroke={theme.muted} strokeWidth="2" />
+                <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={theme.muted} strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <input
+                className="search-input"
+                type="text"
+                inputMode="numeric"
+                placeholder="SEARCH PLOT NO…"
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchResults.length > 0) {
+                    setSelectedPlot(searchResults[0].n);
+                    setSearchQ('');
+                    if (isMobile) closeMobile();
+                  }
+                }}
+              />
+              {searchQ && (
+                <button
+                  onClick={() => setSearchQ('')}
+                  style={{
+                    position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', color: theme.muted, fontSize: 14,
+                    cursor: 'pointer', padding: '4px 6px', lineHeight: 1
+                  }}
+                  aria-label="Clear search"
+                >×</button>
+              )}
+            </div>
+            {/* Results dropdown */}
+            {searchResults.length > 0 && (
+              <div style={{
+                marginTop: 6,
+                background: 'rgba(8,6,4,0.92)',
+                border: `1px solid ${theme.accent}40`,
+                maxHeight: 200, overflowY: 'auto'
+              }}>
+                {searchResults.map(p => {
+                  const meta = PARTY[p.pa];
+                  return (
+                    <button
+                      key={p.n}
+                      onClick={() => {
+                        setSelectedPlot(p.n);
+                        setSearchQ('');
+                        if (isMobile) closeMobile();
+                      }}
+                      onMouseEnter={() => onPlotEnter(p.n)}
+                      onMouseLeave={onPlotLeave}
+                      style={{
+                        width: '100%', padding: '9px 12px',
+                        background: 'transparent', border: 'none',
+                        borderBottom: `1px solid ${theme.border}`,
+                        color: theme.text, cursor: 'pointer',
+                        fontFamily: 'inherit', textAlign: 'left',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        transition: 'background .15s'
+                      }}
+                      onMouseDown={(e) => e.currentTarget.style.background = `${meta.color}22`}
+                      onMouseUp={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span style={{
+                        width: 4, height: 18, background: meta.color, flexShrink: 0
+                      }} />
+                      <span className="mono" style={{ fontSize: 12, color: theme.text, minWidth: 36 }}>
+                        {String(p.n).padStart(3, '0')}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 10.5, color: theme.muted, letterSpacing: '.05em' }}>
+                        {meta.name}
+                      </span>
+                      <span className="mono" style={{ fontSize: 10, color: theme.faint }}>
+                        {p.s}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {searchQ && searchResults.length === 0 && (
+              <div style={{
+                marginTop: 6, padding: '10px 12px', fontSize: 11, color: theme.faint,
+                background: 'rgba(8,6,4,0.5)', border: `1px solid ${theme.border}`,
+                letterSpacing: '.05em'
+              }}>
+                No plot matches “{searchQ}”
+              </div>
+            )}
           </div>
 
           {/* PARTY BUTTONS */}
@@ -775,7 +1076,17 @@ export default function EliminedhuProject() {
                   <span style={{ textAlign: 'right' }}>SIZE</span>
                   <span style={{ textAlign: 'right' }}>FACING</span>
                 </div>
-                {sortedPartyPlots.map(p => {
+                {sortedPartyPlots.length === 0 ? (
+                  <div style={{
+                    padding: '32px 16px', textAlign: 'center',
+                    color: theme.faint, fontSize: 12, lineHeight: 1.6
+                  }}>
+                    <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.4 }}>○</div>
+                    <div className="display-font" style={{ fontSize: 15, color: theme.muted, fontStyle: 'italic' }}>
+                      No plots match
+                    </div>
+                  </div>
+                ) : sortedPartyPlots.map(p => {
                   const isSel = selectedPlot === p.n;
                   return (
                     <div key={p.n} className="plot-row"
@@ -878,6 +1189,14 @@ export default function EliminedhuProject() {
                     }}>
                       {TOUR_STEPS[tourStep].label}
                     </div>
+                    {/* Narration caption */}
+                    <div style={{
+                      marginTop: 8, fontSize: 11, color: theme.muted,
+                      lineHeight: 1.5, letterSpacing: '.01em',
+                      fontStyle: 'italic'
+                    }}>
+                      {TOUR_STEPS[tourStep].caption}
+                    </div>
                     {/* Progress bar */}
                     <div style={{
                       marginTop: 10, height: 2, background: theme.border, position: 'relative'
@@ -917,6 +1236,118 @@ export default function EliminedhuProject() {
                   <span>Show plot numbers</span>
                 </label>
               </div>
+
+              {/* INVENTORY MIX — size histogram */}
+              <div className="fadeup" style={{ animationDelay: '.35s' }}>
+                <div style={{
+                  fontSize: 9.5, letterSpacing: '.3em', color: theme.faint, marginBottom: 12,
+                  display: 'flex', alignItems: 'center', gap: 10
+                }}>
+                  <span style={{ flex: 1, height: 1, background: theme.border }} />
+                  INVENTORY MIX
+                  <span style={{ flex: 1, height: 1, background: theme.border }} />
+                </div>
+                <div className="premium-card" style={{ padding: '12px 14px' }}>
+                  {(() => {
+                    const maxC = Math.max(1, ...sizeBuckets.map(b => b.count));
+                    return sizeBuckets.map(b => (
+                      <div key={b.label} style={{ marginBottom: 8 }}>
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between',
+                          fontSize: 10, color: theme.muted, marginBottom: 3,
+                          letterSpacing: '.05em'
+                        }}>
+                          <span className="mono">{b.label} sq.yds</span>
+                          <span className="mono" style={{ color: theme.text, fontWeight: 500 }}>{b.count}</span>
+                        </div>
+                        <div style={{ height: 4, background: theme.border, position: 'relative' }}>
+                          <div style={{
+                            position: 'absolute', inset: 0,
+                            width: `${(b.count / maxC) * 100}%`,
+                            background: `linear-gradient(90deg, ${theme.accent}, ${theme.accent}66)`,
+                            transition: 'width .4s ease'
+                          }} />
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              {/* FACING DISTRIBUTION */}
+              <div className="fadeup" style={{ animationDelay: '.4s' }}>
+                <div style={{
+                  fontSize: 9.5, letterSpacing: '.3em', color: theme.faint, marginBottom: 12,
+                  display: 'flex', alignItems: 'center', gap: 10
+                }}>
+                  <span style={{ flex: 1, height: 1, background: theme.border }} />
+                  FACING DISTRIBUTION
+                  <span style={{ flex: 1, height: 1, background: theme.border }} />
+                </div>
+                <div className="premium-card" style={{ padding: '12px 14px' }}>
+                  {(() => {
+                    const maxC = Math.max(1, ...facingDist.map(([, c]) => c));
+                    return facingDist.map(([f, c]) => (
+                      <div key={f} style={{
+                        display: 'grid', gridTemplateColumns: '46px 1fr 32px',
+                        alignItems: 'center', gap: 10, marginBottom: 6
+                      }}>
+                        <span className="mono" style={{
+                          fontSize: 10.5, color: theme.text, letterSpacing: '.05em', fontWeight: 500
+                        }}>{f}</span>
+                        <div style={{ height: 4, background: theme.border, position: 'relative' }}>
+                          <div style={{
+                            position: 'absolute', inset: 0,
+                            width: `${(c / maxC) * 100}%`,
+                            background: `linear-gradient(90deg, ${theme.accent}, ${theme.accent}55)`,
+                            transition: 'width .4s ease'
+                          }} />
+                        </div>
+                        <span className="mono" style={{
+                          fontSize: 10.5, color: theme.muted, textAlign: 'right'
+                        }}>{c}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              {/* KEYBOARD SHORTCUTS */}
+              <div className="fadeup" style={{ animationDelay: '.45s' }}>
+                <div style={{
+                  fontSize: 9.5, letterSpacing: '.3em', color: theme.faint, marginBottom: 12,
+                  display: 'flex', alignItems: 'center', gap: 10
+                }}>
+                  <span style={{ flex: 1, height: 1, background: theme.border }} />
+                  KEYBOARD
+                  <span style={{ flex: 1, height: 1, background: theme.border }} />
+                </div>
+                <div className="premium-card" style={{ padding: '12px 14px' }}>
+                  {[
+                    ['1 / 2 / 3', 'Filter ownership'],
+                    ['← / →',     'Prev / next plot'],
+                    ['L',         'Toggle plot numbers'],
+                    ['T',         'Play / stop tour'],
+                    ['Shift+Click', 'Add to compare'],
+                    ['Esc',       'Close'],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', padding: '4px 0',
+                      fontSize: 10.5, color: theme.muted, letterSpacing: '.03em'
+                    }}>
+                      <span className="mono" style={{
+                        color: theme.text, fontWeight: 500,
+                        padding: '2px 6px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${theme.border}`,
+                        fontSize: 9.5
+                      }}>{k}</span>
+                      <span>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
@@ -940,17 +1371,87 @@ export default function EliminedhuProject() {
           flex: 1, position: 'relative', display: 'flex',
           alignItems: 'center', justifyContent: 'center',
           padding: isMobile ? 16 : 40, perspective: '2000px',
-          minHeight: isMobile ? 'calc(100vh - 56px)' : '100vh'
+          minHeight: isMobile ? 'calc(100vh - 56px)' : '100vh',
+          minWidth: 0,           // ← critical: lets flex actually shrink when right panel opens
+          overflow: 'hidden'     // belt-and-braces: SVG never paints past <main>
         }}>
           {!isMobile && (
             <>
+              {/* North marker — top-right */}
               <div style={{ position: 'absolute', top: 32, right: 32, fontSize: 11, letterSpacing: '.2em', color: theme.faint, textAlign: 'center', zIndex: 5 }}>
                 <div className="display-font" style={{ fontSize: 28, color: theme.accent, lineHeight: 1, fontStyle: 'italic' }}>N</div>
                 <div style={{ width: 1, height: 32, background: `linear-gradient(to bottom, ${theme.accent}, transparent)`, margin: '4px auto' }} />
               </div>
-              <div style={{ position: 'absolute', bottom: 32, right: 32, fontSize: 10, letterSpacing: '.2em', color: theme.faint, zIndex: 5, textAlign: 'right' }}>
-                <div style={{ width: 80, height: 1, background: theme.faint, marginBottom: 4, marginLeft: 'auto' }} />
+              {/* Scale marker — moved to bottom-LEFT (mini-map now occupies bottom-right) */}
+              <div style={{ position: 'absolute', bottom: 32, left: 32, fontSize: 10, letterSpacing: '.2em', color: theme.faint, zIndex: 5, textAlign: 'left' }}>
+                <div style={{ width: 80, height: 1, background: theme.faint, marginBottom: 4 }} />
                 <div className="mono">50 m</div>
+              </div>
+              {/* Mini-map — bottom-right */}
+              <div style={{
+                position: 'absolute', bottom: 24, right: 24, zIndex: 5,
+                width: 140, padding: 8,
+                background: 'rgba(8,6,4,0.65)',
+                border: `1px solid ${theme.border}`,
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)'
+              }}>
+                <div style={{
+                  fontSize: 8.5, letterSpacing: '.25em', color: theme.faint,
+                  marginBottom: 6, display: 'flex', justifyContent: 'space-between'
+                }}>
+                  <span>OVERVIEW</span>
+                  {tourPlaying && <span style={{ color: theme.accent }}>● TOUR</span>}
+                </div>
+                <svg viewBox={`0 0 ${SITE_W} ${SITE_H}`}
+                  preserveAspectRatio="xMidYMid meet"
+                  style={{ width: '100%', height: 100, display: 'block' }}>
+                  {/* Boundary */}
+                  {D.boundary.map((p, i) => (
+                    <polygon key={`mb-${i}`}
+                      points={p.map(([x, y]) => `${x - BOUNDS.minX},${y - BOUNDS.minY}`).join(' ')}
+                      fill={theme.landBg[1]} stroke={theme.faint} strokeWidth="0.8" opacity="0.9" />
+                  ))}
+                  {/* Water */}
+                  {D.water.map((p, i) => (
+                    <polygon key={`mw-${i}`}
+                      points={p.map(([x, y]) => `${x - BOUNDS.minX},${y - BOUNDS.minY}`).join(' ')}
+                      fill={theme.water[0]} opacity="0.7" />
+                  ))}
+                  {/* Green */}
+                  {D.green.map((p, i) => (
+                    <polygon key={`mg-${i}`}
+                      points={p.map(([x, y]) => `${x - BOUNDS.minX},${y - BOUNDS.minY}`).join(' ')}
+                      fill={theme.green[0]} opacity="0.7" />
+                  ))}
+                  {/* Plots — colored by ownership */}
+                  {D.plots.map(p => {
+                    if (!p || !PARTY[p.pa]) return null;
+                    return (
+                      <polygon key={`mp-${p.n}`}
+                        points={p.p.map(([x, y]) => `${x - BOUNDS.minX},${y - BOUNDS.minY}`).join(' ')}
+                        fill={PARTY[p.pa].color} opacity="0.85" />
+                    );
+                  })}
+                  {/* Selected plot highlight */}
+                  {currentPlot && (
+                    <polygon
+                      points={currentPlot.p.map(([x, y]) => `${x - BOUNDS.minX},${y - BOUNDS.minY}`).join(' ')}
+                      fill="none" stroke="#fff" strokeWidth="2" />
+                  )}
+                  {/* Tour camera dot */}
+                  {tourPlaying && (() => {
+                    const w = TOUR_STEPS[tourStep].world;
+                    const x = w[0] - BOUNDS.minX, y = w[1] - BOUNDS.minY;
+                    return (
+                      <g>
+                        <circle cx={x} cy={y} r={9} fill="none" stroke={theme.accent}
+                          strokeWidth="1.5" opacity="0.6" className="entrance-pulse" />
+                        <circle cx={x} cy={y} r={4} fill={theme.accent} />
+                      </g>
+                    );
+                  })()}
+                </svg>
               </div>
             </>
           )}
@@ -981,29 +1482,50 @@ export default function EliminedhuProject() {
               <RoadAnnotation theme={theme} />
 
               {/* INTERACTIVE PLOTS */}
-              {D.plots.map(plot => {
+              {D.plots.map((plot, idx) => {
                 if (!plot || !PARTY[plot.pa]) return null;
-                const meta      = PARTY[plot.pa];
-                const matches   = !selectedParty || plot.pa === selectedParty;
+                const meta       = PARTY[plot.pa];
+                const matches    = !selectedParty || plot.pa === selectedParty;
                 const isSelected = selectedPlot === plot.n;
                 const isHovered  = hovered === plot.n;
+                const inCompare  = compareIds.includes(plot.n);
                 const [cx, cy]   = centroid(plot.p);
                 const [pcx, pcy] = proj(cx, cy);
                 const opacity    = matches ? 1 : 0.08;
                 // (10) Depth-of-field blur
                 const blur = blurMap && matches && !isSelected && !isHovered ? blurMap[plot.n] : null;
+                // Watermark labels: when labels are off AND tilt is low, draw a faint
+                // number on every 5th plot so the eye has anchors.
+                const showWatermark = !showLabels && tilt <= 20 && matches && !isSelected && !isHovered && (plot.n % 5 === 0);
+
+                // Build class list: plot-poly + (breathe when not selected) + (boot-in shimmer on first load)
+                let cls = 'plot-poly';
+                if (matches && !isSelected) cls += ' plot-breathe';
+                if (!bootDone) cls += ' plot-boot';
+
+                // Stroke / strokeWidth: compare wins over hover wins over selected
+                let stroke = '#0a0908', strokeWidth = 0.4;
+                if (isSelected)      { stroke = meta.stroke; strokeWidth = 1.2; }
+                else if (isHovered)  { stroke = '#ffffff';   strokeWidth = 0.8; }
+                else if (inCompare)  { stroke = theme.accent; strokeWidth = 1.0; }
+
+                // Compose inline style: blur + staggered boot delay (only when not yet booted)
+                const inlineStyle = {};
+                if (blur) inlineStyle.filter = `blur(${blur.toFixed(2)}px)`;
+                if (!bootDone) inlineStyle.animationDelay = `${(idx % 30) * 18}ms`;
 
                 return (
                   <g key={plot.n}>
                     <polygon
                       points={ptsToPath(plot.p)}
                       fill={`url(#${meta.gradId})`}
-                      stroke={isSelected ? meta.stroke : isHovered ? '#ffffff' : '#0a0908'}
-                      strokeWidth={isSelected ? 1.2 : 0.4}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      strokeDasharray={inCompare && !isSelected ? '2,1.5' : undefined}
                       opacity={opacity}
-                      className={`plot-poly${matches && !isSelected ? ' plot-breathe' : ''}`}
-                      style={blur ? { filter: `blur(${blur.toFixed(2)}px)` } : undefined}
-                      onClick={() => setSelectedPlot(plot.n)}
+                      className={cls}
+                      style={Object.keys(inlineStyle).length ? inlineStyle : undefined}
+                      onClick={(e) => handlePlotClick(plot.n, e)}
                       onMouseEnter={() => onPlotEnter(plot.n)}
                       onMouseLeave={onPlotLeave}
                     />
@@ -1019,11 +1541,36 @@ export default function EliminedhuProject() {
                         {plot.n}
                       </text>
                     )}
+                    {/* Watermark anchor numbers — faint, every 5th plot, low tilt only */}
+                    {showWatermark && (
+                      <text
+                        x={pcx} y={pcy + 2}
+                        textAnchor="middle"
+                        fontSize={3.6}
+                        fontFamily="JetBrains Mono, monospace" fontWeight="600"
+                        fill="#0a0908"
+                        fillOpacity="0.35"
+                        pointerEvents="none">
+                        {plot.n}
+                      </text>
+                    )}
+                    {/* Compare-tray badge — small circle with order index */}
+                    {inCompare && (
+                      <g pointerEvents="none">
+                        <circle cx={pcx} cy={pcy - 7} r={3.2}
+                          fill={theme.accent} stroke="#0a0908" strokeWidth="0.5" />
+                        <text x={pcx} y={pcy - 5.5} textAnchor="middle"
+                          fontSize="4.2" fontWeight="700" fill="#0a0908"
+                          style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+                          {compareIds.indexOf(plot.n) + 1}
+                        </text>
+                      </g>
+                    )}
                   </g>
                 );
               })}
 
-              {/* Drone tour route — only visible during the guided tour */}
+              {/* Tour camera focus marker — only the active waypoint */}
               <TourRoute theme={theme} visible={tourPlaying} activeStep={tourStep} />
 
               {/* Main entrance marker — sits above the interactive plot layer */}
@@ -1099,6 +1646,161 @@ export default function EliminedhuProject() {
               </div>
             );
           })()}
+
+          {/* ── COMPARE PILL — anchored bottom-center over canvas ── */}
+          {compareIds.length > 0 && !showCompare && (
+            <button
+              onClick={() => setShowCompare(true)}
+              style={{
+                position: 'absolute', bottom: isMobile ? 16 : 28,
+                left: '50%', transform: 'translateX(-50%)', zIndex: 40,
+                padding: '10px 18px',
+                background: `linear-gradient(135deg, ${theme.accent}33, ${theme.accent}14)`,
+                border: `1px solid ${theme.accent}`,
+                color: theme.accent,
+                fontFamily: 'inherit', fontSize: 11, letterSpacing: '.25em', fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 10,
+                boxShadow: `0 8px 24px ${theme.accent}33, 0 0 0 4px ${theme.accent}11`
+              }}
+            >
+              <span>COMPARE ({compareIds.length})</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {compareIds.map(n => {
+                  const p = D.plots.find(x => x && x.n === n);
+                  const meta = p && PARTY[p.pa];
+                  return (
+                    <div key={n} style={{
+                      width: 6, height: 14,
+                      background: meta ? meta.color : theme.muted
+                    }} />
+                  );
+                })}
+              </div>
+            </button>
+          )}
+
+          {/* ── COMPARE DRAWER ── */}
+          {showCompare && compareIds.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              left: isMobile ? 8 : 24, right: isMobile ? 8 : 24,
+              bottom: isMobile ? 8 : 24, zIndex: 45,
+              background: 'rgba(8,6,4,0.92)', border: `1px solid ${theme.accent}40`,
+              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+              padding: isMobile ? '16px 16px 20px' : '20px 24px 24px',
+              boxShadow: '0 -12px 40px rgba(0,0,0,0.6)'
+            }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: 14
+              }}>
+                <div>
+                  <div style={{ fontSize: 9.5, letterSpacing: '.3em', color: theme.faint }}>
+                    SIDE-BY-SIDE COMPARISON
+                  </div>
+                  <div className="display-font" style={{
+                    fontSize: 20, color: theme.text, letterSpacing: '-.01em', marginTop: 2
+                  }}>
+                    {compareIds.length} {compareIds.length === 1 ? 'plot' : 'plots'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={clearCompare} style={{
+                    background: 'transparent', border: `1px solid ${theme.border}`,
+                    color: theme.muted, padding: '7px 12px',
+                    fontSize: 10, letterSpacing: '.2em',
+                    cursor: 'pointer', fontFamily: 'inherit'
+                  }}>CLEAR</button>
+                  <button onClick={() => setShowCompare(false)} style={{
+                    background: 'transparent', border: `1px solid ${theme.border}`,
+                    color: theme.muted, padding: '7px 14px',
+                    fontSize: 14, lineHeight: 1, cursor: 'pointer'
+                  }}>×</button>
+                </div>
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: `repeat(${compareIds.length}, 1fr)`,
+                gap: 12
+              }}>
+                {compareIds.map(n => {
+                  const p = D.plots.find(x => x && x.n === n);
+                  if (!p || !PARTY[p.pa]) return null;
+                  const meta = PARTY[p.pa];
+                  // Compute "best" markers for this column
+                  const sizes  = compareIds.map(id => (D.plots.find(x => x && x.n === id) || {}).s || 0);
+                  const maxS   = Math.max(...sizes);
+                  const isBig  = p.s === maxS && compareIds.length > 1;
+                  return (
+                    <div key={n} className="premium-card" style={{
+                      padding: '14px 14px 16px',
+                      borderLeft: `3px solid ${meta.color}`,
+                      background: `linear-gradient(180deg, ${meta.color}14, transparent 60%)`,
+                      position: 'relative'
+                    }}>
+                      <button onClick={() => removeFromCompare(n)} style={{
+                        position: 'absolute', top: 6, right: 6,
+                        background: 'rgba(0,0,0,0.4)', border: 'none',
+                        color: theme.muted, fontSize: 14, cursor: 'pointer',
+                        width: 22, height: 22, lineHeight: 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }} aria-label="Remove">×</button>
+                      <div style={{
+                        fontSize: 9, letterSpacing: '.3em', color: theme.faint, marginBottom: 4
+                      }}>PLOT</div>
+                      <div className="display-font" style={{
+                        fontSize: 32, color: theme.text, lineHeight: 1, fontWeight: 400,
+                        letterSpacing: '-.02em', marginBottom: 10
+                      }}>{String(p.n).padStart(3, '0')}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                        <div>
+                          <div style={{ fontSize: 8.5, letterSpacing: '.2em', color: theme.faint }}>SIZE</div>
+                          <div className="mono" style={{
+                            fontSize: 14, color: theme.text, fontWeight: 500, marginTop: 2,
+                            display: 'flex', alignItems: 'baseline', gap: 4
+                          }}>
+                            {p.s}
+                            <span style={{ fontSize: 9, color: theme.faint }}>sq.yds</span>
+                            {isBig && <span style={{
+                              fontSize: 8, color: theme.accent, letterSpacing: '.15em',
+                              marginLeft: 4, fontWeight: 600
+                            }}>★ LARGEST</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 8.5, letterSpacing: '.2em', color: theme.faint }}>FACING</div>
+                          <div className="mono" style={{
+                            fontSize: 14, color: theme.text, fontWeight: 500, marginTop: 2
+                          }}>{p.f}</div>
+                          <div style={{ fontSize: 8.5, color: theme.faint, marginTop: 1 }}>
+                            {FACING_FULL[p.f] || ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: 9.5, letterSpacing: '.2em', color: meta.color,
+                        display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600,
+                        paddingTop: 8, borderTop: `1px solid ${meta.color}30`
+                      }}>
+                        <div style={{
+                          width: 6, height: 6, background: meta.color, borderRadius: '50%',
+                          boxShadow: `0 0 6px ${meta.color}`
+                        }} />
+                        {meta.name.toUpperCase()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{
+                marginTop: 12, fontSize: 10, color: theme.faint, letterSpacing: '.05em',
+                textAlign: 'center'
+              }}>
+                Shift-click another plot to add · max 3
+              </div>
+            </div>
+          )}
         </main>
 
         {/* ── RIGHT DETAIL PANEL ── */}
@@ -1106,6 +1808,7 @@ export default function EliminedhuProject() {
           <aside style={{
             width: isMobile ? '100%' : 340,
             minWidth: isMobile ? 'unset' : 340,
+            flexShrink: 0,        // ← never let flex squeeze this panel
             padding: isMobile ? '24px 20px' : '36px 30px',
             borderLeft: isMobile ? 'none' : `1px solid ${PARTY[currentPlot.pa].color}40`,
             borderTop: isMobile ? `2px solid ${PARTY[currentPlot.pa].color}` : 'none',
