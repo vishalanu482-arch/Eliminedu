@@ -1370,10 +1370,17 @@ export default function EliminedhuProject() {
         <main style={{
           flex: 1, position: 'relative', display: 'flex',
           alignItems: 'center', justifyContent: 'center',
-          padding: isMobile ? 16 : 40, perspective: '2000px',
+          // Right padding reserves space for the FIXED right detail panel (340px)
+          // so the canvas reflows around it instead of being hidden behind it.
+          paddingTop:    isMobile ? 16 : 40,
+          paddingBottom: isMobile ? 16 : 40,
+          paddingLeft:   isMobile ? 16 : 40,
+          paddingRight:  isMobile ? 16 : (currentPlot ? 380 : 40),
+          perspective: '2000px',
           minHeight: isMobile ? 'calc(100vh - 56px)' : '100vh',
-          minWidth: 0,           // ← critical: lets flex actually shrink when right panel opens
-          overflow: 'hidden'     // belt-and-braces: SVG never paints past <main>
+          minWidth: 0,
+          overflow: 'hidden',
+          transition: 'padding-right .3s ease'   // smooth canvas reflow when panel opens/closes
         }}>
           {!isMobile && (
             <>
@@ -1387,7 +1394,8 @@ export default function EliminedhuProject() {
                 <div style={{ width: 80, height: 1, background: theme.faint, marginBottom: 4 }} />
                 <div className="mono">50 m</div>
               </div>
-              {/* Mini-map — bottom-right */}
+              {/* Mini-map — bottom-right (hidden when right detail panel is open to avoid overlap) */}
+              {!currentPlot && (
               <div style={{
                 position: 'absolute', bottom: 24, right: 24, zIndex: 5,
                 width: 140, padding: 8,
@@ -1453,6 +1461,7 @@ export default function EliminedhuProject() {
                   })()}
                 </svg>
               </div>
+              )}
             </>
           )}
 
@@ -1684,12 +1693,15 @@ export default function EliminedhuProject() {
           {showCompare && compareIds.length > 0 && (
             <div style={{
               position: 'absolute',
-              left: isMobile ? 8 : 24, right: isMobile ? 8 : 24,
+              left:   isMobile ? 8 : 24,
+              // When right detail panel is open (fixed, 340px), pull drawer in to avoid overlap
+              right:  isMobile ? 8 : (currentPlot ? 360 : 24),
               bottom: isMobile ? 8 : 24, zIndex: 45,
               background: 'rgba(8,6,4,0.92)', border: `1px solid ${theme.accent}40`,
               backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
               padding: isMobile ? '16px 16px 20px' : '20px 24px 24px',
-              boxShadow: '0 -12px 40px rgba(0,0,0,0.6)'
+              boxShadow: '0 -12px 40px rgba(0,0,0,0.6)',
+              transition: 'right .3s ease'
             }}>
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -1808,20 +1820,29 @@ export default function EliminedhuProject() {
           <aside style={{
             width: isMobile ? '100%' : 340,
             minWidth: isMobile ? 'unset' : 340,
-            flexShrink: 0,        // ← never let flex squeeze this panel
+            flexShrink: 0,
             padding: isMobile ? '24px 20px' : '36px 30px',
             borderLeft: isMobile ? 'none' : `1px solid ${PARTY[currentPlot.pa].color}40`,
             borderTop: isMobile ? `2px solid ${PARTY[currentPlot.pa].color}` : 'none',
             background: theme.panel, backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
             display: 'flex', flexDirection: 'column', gap: 22,
+            // Pin to viewport edge — on desktop fixed-right, on mobile fixed-bottom.
+            // This is the fix for the panel getting clipped when clicking plots on
+            // the right side of the canvas: it now docks to the screen, not the flow.
+            position: 'fixed',
+            top:    isMobile ? 'auto' : 0,
+            bottom: isMobile ? 0      : 0,
+            left:   isMobile ? 0      : 'auto',
+            right:  0,
+            height: isMobile ? 'auto' : '100vh',
             maxHeight: isMobile ? '50vh' : '100vh',
-            overflowY: 'auto', animation: 'fadeUp .3s ease-out',
-            position: isMobile ? 'fixed' : 'relative',
-            bottom: isMobile ? 0    : 'auto',
-            left:   isMobile ? 0    : 'auto',
-            right:  isMobile ? 0    : 'auto',
-            zIndex: isMobile ? 18   : 2,
-            boxShadow: isMobile ? '0 -8px 32px rgba(0,0,0,.6)' : `inset 4px 0 0 -3px ${PARTY[currentPlot.pa].color}`
+            overflowY: 'auto',
+            animation: 'fadeUp .3s ease-out',
+            zIndex: 30,
+            boxShadow: isMobile
+              ? '0 -8px 32px rgba(0,0,0,.6)'
+              : `-12px 0 40px rgba(0,0,0,0.5), inset 4px 0 0 -3px ${PARTY[currentPlot.pa].color}`
           }}>
             {/* Header — plot number + close */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
